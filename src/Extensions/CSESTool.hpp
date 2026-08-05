@@ -23,9 +23,6 @@
 #include <QString>
 #include <QJsonObject>
 #include <QTimer>
-#include <QPair>
-#include <QList>
-#include <QByteArray>
 
 namespace Extensions
 {
@@ -42,8 +39,6 @@ class CSESTool : public QObject
     void logout();
     bool isLoggedIn() const;
     QString savedToken() const;
-    QString savedScope() const;
-    void setScope(const QString &scope);
     void clearToken(); // drop the stored token (e.g. when it's invalid); isLoggedIn() then returns false
 
     void submitFile(const QString &scope,
@@ -53,15 +48,6 @@ class CSESTool : public QObject
                     const QString &taskId = {});
 
     void fetchSubmission(const QString &scope, qint64 submissionId, bool longPoll = true);
-    void fetchSubmissionList(const QString &scope, const QString &taskId);
-    void fetchSamples(const QString &scope, const QString &taskId);
-    void fetchStatement(const QString &scope, const QString &taskId);
-    void fetchCourses();
-    void fetchCourseContent(const QString &scope);
-    void fetchTemplate(const QString &scope,
-                       const QString &taskId = {},
-                       const QString &langName = {},
-                       const QString &filename = {});
 
     static bool parseCsesUrl(const QString &url, QString &scope, QString &taskId);
 
@@ -77,19 +63,11 @@ class CSESTool : public QObject
     void submissionFinished(const QJsonObject &info);
     void submitError(const QString &errorCode, const QString &message);
 
-    void samplesReady(const QList<QPair<QByteArray, QByteArray>> &cases);
-    void statementReady(const QJsonObject &statement);
-    void coursesReady(const QJsonArray &courses);
-    void courseContentReady(const QJsonObject &content);
-    void templateReady(const QByteArray &source, const QString &filename);
-    void submissionListReady(const QJsonArray &submissions);
-
     void networkError(const QString &message);
 
   private:
     QNetworkAccessManager *m_nam;
     QString m_token;
-    QString m_scope;
     bool m_loginFlowActive = false; // true between POST /login and confirmed browser login
 
     void persistToken(const QString &token);
@@ -98,7 +76,6 @@ class CSESTool : public QObject
     QString scopedUrl(const QString &scope, const QString &endpoint) const;
 
     QNetworkRequest authRequest(const QUrl &url) const;
-    QNetworkRequest anonRequest(const QUrl &url) const;
 
     bool handleError(QNetworkReply *reply);
     QString parseErrorCode(const QByteArray &body) const;

@@ -17,7 +17,6 @@
 
 #include "Extensions/CSESTool.hpp"
 #include <QJsonDocument>
-#include <QJsonArray>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
@@ -32,7 +31,6 @@ CSESTool::CSESTool(QObject *parent) : QObject(parent), m_nam(new QNetworkAccessM
 {
     QSettings s("CPEditor", "cses");
     m_token = s.value("token").toString();
-    m_scope = s.value("scope").toString();
 }
 
 void CSESTool::persistToken(const QString &token)
@@ -60,18 +58,6 @@ QString CSESTool::savedToken() const
     return m_token;
 }
 
-QString CSESTool::savedScope() const
-{
-    return m_scope;
-}
-
-void CSESTool::setScope(const QString &scope)
-{
-    m_scope = scope;
-    QSettings s("CPEditor", "cses");
-    s.setValue("scope", scope);
-}
-
 QString CSESTool::apiUrl(const QString &path) const
 {
     return "https://cses.fi/api" + path;
@@ -88,15 +74,6 @@ QString CSESTool::scopedUrl(const QString &scope, const QString &endpoint) const
 }
 
 QNetworkRequest CSESTool::authRequest(const QUrl &url) const
-{
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    if (!m_token.isEmpty())
-        req.setRawHeader("X-Auth-Token", m_token.toUtf8());
-    return req;
-}
-
-QNetworkRequest CSESTool::anonRequest(const QUrl &url) const
 {
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -309,128 +286,6 @@ void CSESTool::continuePollIfPending(const QJsonObject &info, const QString &sco
 {
     if (info["pending"].toBool())
         fetchSubmission(scope, submissionId, true);
-}
-
-void CSESTool::fetchSubmissionList(const QString &scope, const QString &taskId)
-{
-    QString url = scopedUrl(scope, "submissions");
-    QUrlQuery query;
-    query.addQueryItem("task", taskId);
-    url += "?" + query.toString();
-    QNetworkRequest req(authRequest(QUrl(url)));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        emit submissionListReady(doc.object()["submissions"].toArray());
-    });
-}
-
-void CSESTool::fetchSamples(const QString &scope, const QString &taskId)
-{
-    QString url = scopedUrl(scope, "samples");
-    QUrlQuery query;
-    query.addQueryItem("task", taskId);
-    url += "?" + query.toString();
-    QNetworkRequest req(anonRequest(QUrl(url)));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        QJsonArray cases = doc.object()["test_cases"].toArray();
-        QList<QPair<QByteArray, QByteArray>> result;
-        for (const auto &c : cases)
-        {
-            QJsonObject obj = c.toObject();
-            QByteArray input = QByteArray::fromBase64(obj["input"].toString().toLatin1());
-            QByteArray output = QByteArray::fromBase64(obj["output"].toString().toLatin1());
-            result.append({input, output});
-        }
-        emit samplesReady(result);
-    });
-}
-
-void CSESTool::fetchStatement(const QString &scope, const QString &taskId)
-{
-    QString url = scopedUrl(scope, "statement");
-    QUrlQuery query;
-    query.addQueryItem("task", taskId);
-    url += "?" + query.toString();
-    QNetworkRequest req(anonRequest(QUrl(url)));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        emit statementReady(doc.object());
-    });
-}
-
-void CSESTool::fetchCourses()
-{
-    QNetworkRequest req(anonRequest(QUrl(apiUrl("/courses"))));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        emit coursesReady(doc.object()["courses"].toArray());
-    });
-}
-
-void CSESTool::fetchCourseContent(const QString &scope)
-{
-    QString url = scopedUrl(scope, "list");
-    QNetworkRequest req(anonRequest(QUrl(url)));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        emit courseContentReady(doc.object());
-    });
-}
-
-void CSESTool::fetchTemplate(const QString &scope,
-                              const QString &taskId,
-                              const QString &langName,
-                              const QString &filename)
-{
-    QString url = scopedUrl(scope, "templates");
-    QUrlQuery query;
-    if (!taskId.isEmpty())
-        query.addQueryItem("task", taskId);
-    if (!langName.isEmpty())
-        query.addQueryItem("language", langName);
-    if (!filename.isEmpty())
-        query.addQueryItem("filename", filename);
-    if (!query.isEmpty())
-        url += "?" + query.toString();
-    QNetworkRequest req(anonRequest(QUrl(url)));
-    QNetworkReply *reply = m_nam->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        QByteArray body = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(body);
-        QJsonObject obj = doc.object();
-        QByteArray source = QByteArray::fromBase64(obj["template_source"].toString().toLatin1());
-        QString fname = obj["filename"].toString();
-        emit templateReady(source, fname);
-    });
 }
 
 bool CSESTool::parseCsesUrl(const QString &url, QString &scope, QString &taskId)
