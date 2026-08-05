@@ -728,6 +728,11 @@
     ]
   },
   {
+    "name": "CSES/Token",
+    "type": "QString",
+    "notr": true
+  },
+  {
     "name": "Show Compile And Run Only",
     "type": "bool",
     "tip": "Hide the Compile Only button and the Run Only button under the code editor in the main window."

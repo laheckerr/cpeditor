@@ -16,46 +16,74 @@
  */
 
 #include "Extensions/CSESTool.hpp"
-#include <QJsonDocument>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QSettings>
+#include "Core/EventLogger.hpp"
+#include "generated/SettingsHelper.hpp"
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QRegularExpression>
+#include <QTimer>
+#include <QUrl>
 #include <QUrlQuery>
 
 namespace Extensions
 {
 
+constexpr qint64 MaxSourceSize = 128 * 1024;
+// ponytail: fixed 2 s retry interval, capped so a dead connection stops after ~5 min
+constexpr int MaxRetryCount = 150;
+
 CSESTool::CSESTool(QObject *parent) : QObject(parent), m_nam(new QNetworkAccessManager(this))
 {
-    QSettings s("CPEditor", "cses");
-    m_token = s.value("token").toString();
+    updateProxy();
+    m_token = SettingsHelper::getCSESToken();
+}
+
+void CSESTool::updateProxy()
+{
+    if (!SettingsHelper::isProxyEnabled())
+        m_nam->setProxy({QNetworkProxy::NoProxy});
+    else if (SettingsHelper::getProxyType() == "System")
+        m_nam->setProxy({QNetworkProxy::DefaultProxy});
+    else
+    {
+        QNetworkProxy proxy;
+        if (SettingsHelper::getProxyType() == "Http")
+            proxy.setType(QNetworkProxy::HttpProxy);
+        else if (SettingsHelper::getProxyType() == "Socks5")
+            proxy.setType(QNetworkProxy::Socks5Proxy);
+        else
+        {
+            LOG_WTF("Unknown proxy type: " << SettingsHelper::getProxyType());
+            proxy.setType(QNetworkProxy::DefaultProxy);
+        }
+        proxy.setHostName(SettingsHelper::getProxyHostName());
+        proxy.setPort(SettingsHelper::getProxyPort());
+        proxy.setUser(SettingsHelper::getProxyUser());
+        proxy.setPassword(SettingsHelper::getProxyPassword());
+        m_nam->setProxy(proxy);
+    }
 }
 
 void CSESTool::persistToken(const QString &token)
 {
     m_token = token;
-    QSettings s("CPEditor", "cses");
-    s.setValue("token", token);
+    SettingsHelper::setCSESToken(token);
 }
 
 void CSESTool::clearToken()
 {
     m_token.clear();
     m_loginFlowActive = false;
-    QSettings s("CPEditor", "cses");
-    s.remove("token");
+    SettingsHelper::setCSESToken({});
 }
 
 bool CSESTool::isLoggedIn() const
 {
     return !m_token.isEmpty();
-}
-
-QString CSESTool::savedToken() const
-{
-    return m_token;
 }
 
 QString CSESTool::apiUrl(const QString &path) const
@@ -132,6 +160,7 @@ QString CSESTool::parseErrorMessage(const QByteArray &body) const
 
 void CSESTool::login()
 {
+    m_loginPollCount = 0;
     QNetworkRequest req(authRequest(QUrl(apiUrl("/login"))));
     QNetworkReply *reply = m_nam->post(req, QByteArray());
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
@@ -140,6 +169,11 @@ void CSESTool::login()
             return;
         QByteArray body = reply->readAll();
         QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (doc.isNull())
+        {
+            emit networkError(tr("Invalid response from the server"));
+            return;
+        }
         QJsonObject obj = doc.object();
         QString token = obj["X-Auth-Token"].toString();
         QString authUrl = obj["authentication_url"].toString();
@@ -162,6 +196,11 @@ void CSESTool::checkLoginStatus()
             m_loginFlowActive = false;
             QByteArray body = reply->readAll();
             QJsonDocument doc = QJsonDocument::fromJson(body);
+            if (doc.isNull())
+            {
+                emit networkError(tr("Invalid response from the server"));
+                return;
+            }
             QString username = doc.object()["username"].toString();
             emit loginSucceeded(username);
         }
@@ -173,6 +212,12 @@ void CSESTool::checkLoginStatus()
             // "invalid_api_key" for a fresh token until the browser login completes.
             if (code == "pending_api_key" || (code == "invalid_api_key" && m_loginFlowActive))
             {
+                if (++m_loginPollCount > MaxRetryCount)
+                {
+                    m_loginFlowActive = false;
+                    emit loginFailed(tr("Login timed out"));
+                    return;
+                }
                 emit loginPending();
                 QTimer::singleShot(2000, this, &CSESTool::checkLoginStatus);
             }
@@ -185,29 +230,19 @@ void CSESTool::checkLoginStatus()
         else
         {
             handleError(reply);
+            m_loginFlowActive = false;
         }
     });
 }
 
-void CSESTool::logout()
+void CSESTool::submitFile(const QString &scope, const QString &filePath, const QString &langName,
+                          const QString &langOption, const QString &taskId)
 {
-    QNetworkRequest req(authRequest(QUrl(apiUrl("/logout"))));
-    QNetworkReply *reply = m_nam->post(req, QByteArray());
-    connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
-        if (handleError(reply))
-            return;
-        clearToken();
-        emit logoutSucceeded();
-    });
-}
-
-void CSESTool::submitFile(const QString &scope,
-                           const QString &filePath,
-                           const QString &langName,
-                           const QString &langOption,
-                           const QString &taskId)
-{
+    if (m_loginFlowActive)
+    {
+        emit submitError("client_error", tr("The login is not confirmed yet"));
+        return;
+    }
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly))
     {
@@ -215,7 +250,7 @@ void CSESTool::submitFile(const QString &scope,
         return;
     }
     QByteArray content = file.readAll();
-    if (content.size() > 131072)
+    if (content.size() > MaxSourceSize)
     {
         emit submitError("client_error", "File is too large (limit 128 kB)");
         return;
@@ -246,6 +281,11 @@ void CSESTool::submitFile(const QString &scope,
         {
             QByteArray body = reply->readAll();
             QJsonDocument doc = QJsonDocument::fromJson(body);
+            if (doc.isNull())
+            {
+                emit networkError(tr("Invalid response from the server"));
+                return;
+            }
             QJsonObject info = doc.object();
             qint64 id = info["id"].toVariant().toLongLong();
             emit submissionCreated(id);
@@ -269,23 +309,36 @@ void CSESTool::fetchSubmission(const QString &scope, qint64 submissionId, bool l
     QNetworkReply *reply = m_nam->get(req);
     connect(reply, &QNetworkReply::finished, this, [this, reply, scope, submissionId] {
         reply->deleteLater();
+        int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (status == 0 && reply->error() != QNetworkReply::NoError)
+        {
+            // No HTTP response (timeout, connection dropped): keep polling instead of giving up.
+            if (++m_pollRetries <= MaxRetryCount)
+            {
+                QTimer::singleShot(2000, this, [this, scope, submissionId] { fetchSubmission(scope, submissionId, true); });
+                return;
+            }
+            m_pollRetries = 0;
+            emit networkError(reply->errorString());
+            return;
+        }
         if (handleError(reply))
             return;
+        m_pollRetries = 0;
         QByteArray body = reply->readAll();
         QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (doc.isNull())
+        {
+            emit networkError(tr("Invalid response from the server"));
+            return;
+        }
         QJsonObject info = doc.object();
         emit submissionUpdated(info);
         if (info["pending"].toBool())
-            continuePollIfPending(info, scope, submissionId);
+            fetchSubmission(scope, submissionId, true);
         else
             emit submissionFinished(info);
     });
-}
-
-void CSESTool::continuePollIfPending(const QJsonObject &info, const QString &scope, qint64 submissionId)
-{
-    if (info["pending"].toBool())
-        fetchSubmission(scope, submissionId, true);
 }
 
 bool CSESTool::parseCsesUrl(const QString &url, QString &scope, QString &taskId)

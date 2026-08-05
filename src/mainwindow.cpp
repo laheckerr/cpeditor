@@ -377,12 +377,11 @@ void MainWindow::setCSESToolUI()
         });
         connect(csesTool, &Extensions::CSESTool::loginSucceeded, this, [this](const QString &username) {
             log->message(tr("CSES"), tr("Logged in as %1").arg(username), "green");
-                if (SettingsHelper::isCSESShowToastMessages())
-                    emit requestToastMessage(tr("CSES"), tr("Logged in as %1").arg(username));
+            if (SettingsHelper::isCSESShowToastMessages())
+                emit requestToastMessage(tr("CSES"), tr("Logged in as %1").arg(username));
         });
-        connect(csesTool, &Extensions::CSESTool::loginPending, this, [this] {
-            log->info(tr("CSES"), tr("Waiting for authentication..."));
-        });
+        connect(csesTool, &Extensions::CSESTool::loginPending, this,
+                [this] { log->info(tr("CSES"), tr("Waiting for authentication...")); });
         connect(csesTool, &Extensions::CSESTool::loginFailed, this, [this](const QString &reason) {
             log->error(tr("CSES"),
                        tr("Login failed: %1. The saved token is invalid, please click \"Submit to CSES\" again to "
@@ -390,11 +389,10 @@ void MainWindow::setCSESToolUI()
                            .arg(reason));
             csesTool->clearToken();
         });
-        connect(csesTool, &Extensions::CSESTool::submissionCreated, this, [this](qint64 id) {
-            log->info(tr("CSES"), tr("Submission created (ID: %1)").arg(id));
-        });
+        connect(csesTool, &Extensions::CSESTool::submissionCreated, this,
+                [this](qint64 id) { log->info(tr("CSES"), tr("Submission created (ID: %1)").arg(id)); });
         connect(csesTool, &Extensions::CSESTool::submissionUpdated, this, [this](const QJsonObject &info) {
-            if (info.contains("test_progress"))
+            if (info.contains("test_progress") && info["test_progress"].isObject())
             {
                 auto progress = info["test_progress"].toObject();
                 int finished = progress["finished_tests"].toInt();
@@ -420,9 +418,8 @@ void MainWindow::setCSESToolUI()
         connect(csesTool, &Extensions::CSESTool::submitError, this, [this](const QString &code, const QString &msg) {
             log->error(tr("CSES"), tr("Submit error: %1 - %2").arg(code, msg));
         });
-        connect(csesTool, &Extensions::CSESTool::networkError, this, [this](const QString &msg) {
-            log->error(tr("CSES"), tr("Network error: %1").arg(msg));
-        });
+        connect(csesTool, &Extensions::CSESTool::networkError, this,
+                [this](const QString &msg) { log->error(tr("CSES"), tr("Network error: %1").arg(msg)); });
         connect(submitToCSES, &QPushButton::clicked, this, [this] {
             if (!csesTool->isLoggedIn())
             {
@@ -588,11 +585,9 @@ void MainWindow::setProblemURL(const QString &url)
     else if (problemURL.contains("cses.fi"))
     {
         setCSESToolUI();
-        removeCFToolUI();
     }
     else
     {
-        removeCFToolUI();
         removeCSESToolUI();
     }
     emit editorFileChanged();

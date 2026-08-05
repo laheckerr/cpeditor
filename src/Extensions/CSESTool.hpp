@@ -18,11 +18,14 @@
 #ifndef CSESTOOL_HPP
 #define CSESTOOL_HPP
 
-#include <QNetworkAccessManager>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
-#include <QJsonObject>
-#include <QTimer>
+
+class QNetworkAccessManager;
+class QNetworkReply;
+class QNetworkRequest;
+class QUrl;
 
 namespace Extensions
 {
@@ -36,15 +39,10 @@ class CSESTool : public QObject
 
     void login();
     void checkLoginStatus();
-    void logout();
     bool isLoggedIn() const;
-    QString savedToken() const;
     void clearToken(); // drop the stored token (e.g. when it's invalid); isLoggedIn() then returns false
 
-    void submitFile(const QString &scope,
-                    const QString &filePath,
-                    const QString &langName,
-                    const QString &langOption,
+    void submitFile(const QString &scope, const QString &filePath, const QString &langName, const QString &langOption,
                     const QString &taskId = {});
 
     void fetchSubmission(const QString &scope, qint64 submissionId, bool longPoll = true);
@@ -56,7 +54,6 @@ class CSESTool : public QObject
     void loginSucceeded(const QString &username);
     void loginPending();
     void loginFailed(const QString &reason);
-    void logoutSucceeded();
 
     void submissionCreated(qint64 submissionId);
     void submissionUpdated(const QJsonObject &info);
@@ -69,8 +66,11 @@ class CSESTool : public QObject
     QNetworkAccessManager *m_nam;
     QString m_token;
     bool m_loginFlowActive = false; // true between POST /login and confirmed browser login
+    int m_loginPollCount = 0;
+    int m_pollRetries = 0;
 
     void persistToken(const QString &token);
+    void updateProxy();
 
     QString apiUrl(const QString &path) const;
     QString scopedUrl(const QString &scope, const QString &endpoint) const;
@@ -80,8 +80,6 @@ class CSESTool : public QObject
     bool handleError(QNetworkReply *reply);
     QString parseErrorCode(const QByteArray &body) const;
     QString parseErrorMessage(const QByteArray &body) const;
-
-    void continuePollIfPending(const QJsonObject &info, const QString &scope, qint64 submissionId);
 };
 
 } // namespace Extensions
