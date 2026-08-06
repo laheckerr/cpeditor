@@ -315,7 +315,8 @@ void CSESTool::fetchSubmission(const QString &scope, qint64 submissionId, bool l
             // No HTTP response (timeout, connection dropped): keep polling instead of giving up.
             if (++m_pollRetries <= MaxRetryCount)
             {
-                QTimer::singleShot(2000, this, [this, scope, submissionId] { fetchSubmission(scope, submissionId, true); });
+                QTimer::singleShot(2000, this,
+                                   [this, scope, submissionId] { fetchSubmission(scope, submissionId, true); });
                 return;
             }
             m_pollRetries = 0;
