@@ -32,7 +32,7 @@
 namespace Extensions
 {
 
-constexpr qint64 MaxSourceSize = 128 * 1024;
+constexpr qint64 MaxSourceSize = 128LL * 1024;
 // ponytail: fixed 2 s retry interval, capped so a dead connection stops after ~5 min
 constexpr int MaxRetryCount = 150;
 
