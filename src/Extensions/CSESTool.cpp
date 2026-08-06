@@ -86,19 +86,18 @@ bool CSESTool::isLoggedIn() const
     return !m_token.isEmpty();
 }
 
-QString CSESTool::apiUrl(const QString &path) const
+QString CSESTool::apiUrl(const QString &path)
 {
     return "https://cses.fi/api" + path;
 }
 
-QString CSESTool::scopedUrl(const QString &scope, const QString &endpoint) const
+QString CSESTool::scopedUrl(const QString &scope, const QString &endpoint)
 {
     bool isNumber = false;
     scope.toLongLong(&isNumber);
     if (isNumber)
         return apiUrl(QString("/contests/%1/%2").arg(scope, endpoint));
-    else
-        return apiUrl(QString("/courses/%1/%2").arg(scope, endpoint));
+    return apiUrl(QString("/courses/%1/%2").arg(scope, endpoint));
 }
 
 QNetworkRequest CSESTool::authRequest(const QUrl &url) const
@@ -146,13 +145,13 @@ bool CSESTool::handleError(QNetworkReply *reply)
     return false;
 }
 
-QString CSESTool::parseErrorCode(const QByteArray &body) const
+QString CSESTool::parseErrorCode(const QByteArray &body)
 {
     QJsonDocument doc = QJsonDocument::fromJson(body);
     return doc.object()["code"].toString();
 }
 
-QString CSESTool::parseErrorMessage(const QByteArray &body) const
+QString CSESTool::parseErrorMessage(const QByteArray &body)
 {
     QJsonDocument doc = QJsonDocument::fromJson(body);
     return doc.object()["message"].toString();
@@ -341,7 +340,7 @@ void CSESTool::fetchSubmission(const QString &scope, qint64 submissionId, bool l
 
 bool CSESTool::parseCsesUrl(const QString &url, QString &scope, QString &taskId)
 {
-    QRegularExpression re("cses\\.fi/(problemset|contest/(\\d+))/(problem|task)/(\\d+)");
+    QRegularExpression re(R"(cses\.fi/(problemset|contest/(\d+))/(problem|task)/(\d+))");
     auto match = re.match(url);
     if (match.hasMatch())
     {

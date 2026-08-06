@@ -427,7 +427,8 @@ void MainWindow::setCSESToolUI()
                 csesTool->login();
                 return;
             }
-            QString scope, taskId;
+            QString scope;
+            QString taskId;
             if (!Extensions::CSESTool::parseCsesUrl(problemURL, scope, taskId))
             {
                 log->error(tr("CSES"), tr("Failed to parse CSES URL"));
@@ -582,13 +583,12 @@ void MainWindow::setProblemURL(const QString &url)
         setCFToolUI();
         removeCSESToolUI();
     }
-    else if (problemURL.contains("cses.fi"))
-    {
-        setCSESToolUI();
-    }
     else
     {
-        removeCSESToolUI();
+        if (problemURL.contains("cses.fi"))
+            setCSESToolUI();
+        else
+            removeCSESToolUI();
     }
     emit editorFileChanged();
 }

@@ -71,14 +71,14 @@ class CSESTool : public QObject
     void persistToken(const QString &token);
     void updateProxy();
 
-    QString apiUrl(const QString &path) const;
-    QString scopedUrl(const QString &scope, const QString &endpoint) const;
+    static QString apiUrl(const QString &path);
+    static QString scopedUrl(const QString &scope, const QString &endpoint);
 
     QNetworkRequest authRequest(const QUrl &url) const;
 
     bool handleError(QNetworkReply *reply);
-    QString parseErrorCode(const QByteArray &body) const;
-    QString parseErrorMessage(const QByteArray &body) const;
+    static QString parseErrorCode(const QByteArray &body);
+    static QString parseErrorMessage(const QByteArray &body);
 };
 
 } // namespace Extensions
