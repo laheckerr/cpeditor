@@ -454,7 +454,7 @@ void MainWindow::setCSESToolUI()
                 else
                 {
                     log->clear();
-                    csesTool->submitFile(scope, path, language, {}, taskId);
+                    csesTool->submitFile(scope, path, language, taskId);
                 }
             }
         });

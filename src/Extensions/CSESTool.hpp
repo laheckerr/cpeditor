@@ -42,8 +42,7 @@ class CSESTool : public QObject
     bool isLoggedIn() const;
     void clearToken(); // drop the stored token (e.g. when it's invalid); isLoggedIn() then returns false
 
-    void submitFile(const QString &scope, const QString &filePath, const QString &langName, const QString &langOption,
-                    const QString &taskId = {});
+    void submitFile(const QString &scope, const QString &filePath, const QString &langName, const QString &taskId = {});
 
     void fetchSubmission(const QString &scope, qint64 submissionId, bool longPoll = true);
 

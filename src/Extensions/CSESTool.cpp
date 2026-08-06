@@ -235,8 +235,7 @@ void CSESTool::checkLoginStatus()
     });
 }
 
-void CSESTool::submitFile(const QString &scope, const QString &filePath, const QString &langName,
-                          const QString &langOption, const QString &taskId)
+void CSESTool::submitFile(const QString &scope, const QString &filePath, const QString &langName, const QString &taskId)
 {
     if (m_loginFlowActive)
     {
@@ -266,8 +265,6 @@ void CSESTool::submitFile(const QString &scope, const QString &filePath, const Q
     QJsonObject langObj;
     if (!langName.isEmpty())
         langObj["name"] = langName;
-    if (!langOption.isEmpty())
-        langObj["option"] = langOption;
     QJsonObject body;
     body["filename"] = filename;
     body["language"] = langObj;
